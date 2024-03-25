@@ -22,6 +22,8 @@ def ensure_root_extension(file_name):
 class SystematicYieldCalc:
     def __init__(self, config_file):
         self.config = self.read_config(config_file)
+        if self.config is None:
+            raise ValueError("Failed to load configuration.")
         if not self.validate_config(self.config):
             raise ValueError("Configuration validation failed.")
 
@@ -37,6 +39,9 @@ class SystematicYieldCalc:
         try:
             with open(config_file, "r") as f:
                 config = yaml.safe_load(f)
+            if config is None:
+                logger.error(f"Configuration file '{config_file}' is empty.")
+                return None
             return config
         except FileNotFoundError:
             logger.error(f"Config file '{config_file}' not found.")
