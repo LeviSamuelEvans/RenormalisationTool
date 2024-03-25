@@ -6,18 +6,51 @@ import yaml
 import logging
 import argparse
 import csv
+import multiprocessing
+import logging
 
-logging.basicConfig(format="{levelname:<8s} {message}", style="{", level=logging.INFO)
-logger = logging.getLogger()
 
 ROOT.EnableImplicitMT()
 
 
 def ensure_root_extension(file_name):
+    """Helper function to add .root extension if missing"""
     if not file_name.endswith(".root"):
         return file_name + ".root"
     return file_name
 
+
+class GreenFormatter(logging.Formatter):
+    GREEN = "\033[1;32m"
+    RESET = "\033[1;0m"
+
+    def format(self, record):
+        if (
+            # log flavour processing in green
+            record.levelno == logging.INFO
+            and record.msg.startswith("Processing flavour:")
+            and record.funcName == "process_flavour_wrapper"
+        ):
+            record.msg = f"{self.GREEN}{record.msg}{self.RESET}"
+        return super().format(record)
+
+
+# logging configuration
+handler = logging.StreamHandler()
+handler.setFormatter(GreenFormatter("{levelname:<8s} {message}", style="{"))
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logger.addHandler(handler)
+
+
+class YieldResult:
+    def __init__(self):
+        self.yields = {}
+
+    def merge(self, other):
+        for sys_name, yield_value in other.yields.items():
+            self.yields[sys_name] = self.yields.get(sys_name, 0) + yield_value
 
 class SystematicYieldCalc:
     def __init__(self, config_file):
@@ -50,30 +83,23 @@ class SystematicYieldCalc:
             logger.error(f"Error while loading config file '{config_file}': {e}")
             return None
 
-    def calculate_yield(self, sample_path, weight_expression, selection):
-        df = ROOT.RDataFrame("nominal_Loose", sample_path)
+    def calculate_yields(self, df, weight_expressions, selection):
+        def fill_result(result, weight_name, weight_expr):
+            result.yields[weight_name] = df.Define(f"weight_{weight_name}", weight_expr).Sum(f"weight_{weight_name}").GetValue()
+
+        result = YieldResult()
         df = df.Filter(selection)
-        df = df.Define("event_weight", weight_expression)
-        yield_count = df.Sum("event_weight").GetValue()
-        return yield_count
+        for name, weight_expr in weight_expressions.items():
+            fill_result(result, name, weight_expr)
+        return result
 
-    def process_weight_based_systematic(
-        self,
-        systematic,
-        systematic_yields,
-        sample_path,
-        nominal_weight,
-        adjusted_selection,
-    ):
+    def process_weight_based_systematic(self, systematic, weight_expressions):
         sys_name = systematic["name"]
-        weight_expression_up = f"({nominal_weight})*({systematic['up_weight']})"
-        weight_expression_down = f"({nominal_weight})*({systematic['down_weight']})"
-
-        systematic_yields[f"{sys_name}_up"] += self.calculate_yield(
-            sample_path, weight_expression_up, adjusted_selection
+        weight_expressions[f"{sys_name}_up"] = (
+            f"({weight_expressions['nominal']})*({systematic['up_weight']})"
         )
-        systematic_yields[f"{sys_name}_down"] += self.calculate_yield(
-            sample_path, weight_expression_down, adjusted_selection
+        weight_expressions[f"{sys_name}_down"] = (
+            f"({weight_expressions['nominal']})*({systematic['down_weight']})"
         )
 
     def process_sample_based_systematic(
@@ -109,10 +135,11 @@ class SystematicYieldCalc:
                         logger.info(
                             f"Processing {variation_type} variation for {systematic['name']}: {sample_path}"
                         )
-                        sys_yield += self.calculate_yield(
-                            sample_path, combined_weight, adjusted_selection
+                        df = ROOT.RDataFrame("nominal_Loose", sample_path)
+                        result = self.calculate_yields(
+                            df, {"nominal": combined_weight}, adjusted_selection
                         )
-
+                        sys_yield += result.yields["nominal"]
                 systematic_yields[f"{systematic['name']}_{variation_type}"] = sys_yield
             else:
                 logger.info(
@@ -121,38 +148,31 @@ class SystematicYieldCalc:
 
     def process_flavour(self, base_path, folders, nominal_weight, flavour_config):
         selection = flavour_config["selection"]
-        nominal_yield = 0
-        systematic_yields = {}
-
+        weight_expressions = {"nominal": nominal_weight}
         for systematic in flavour_config["systematics"]:
             if systematic["type"] == "weight":
-                systematic_yields[f"{systematic['name']}_up"] = 0
-                systematic_yields[f"{systematic['name']}_down"] = 0
+                self.process_weight_based_systematic(systematic, weight_expressions)
 
+        result = YieldResult()
         for folder in folders:
             adjusted_selection = selection
             if "boosted" not in folder and "2l_" not in folder:
                 adjusted_selection += self.config["extra_selections"]["resolved"]
 
             for file_rel_path in flavour_config["files"]:
-
                 file_rel_path_with_ext = ensure_root_extension(file_rel_path)
-
                 sample_path = os.path.join(base_path, folder, file_rel_path_with_ext)
-                logger.info(f"Processing nominal: {sample_path}")
-                nominal_yield += self.calculate_yield(
-                    sample_path, nominal_weight, adjusted_selection
+
+                logger.info(
+                    f"Processing nominal and weight-based systematics: {sample_path}"
+                )
+                df = ROOT.RDataFrame("nominal_Loose", sample_path)
+                result.merge(
+                    self.calculate_yields(df, weight_expressions, adjusted_selection)
                 )
 
-                for systematic in flavour_config["systematics"]:
-                    if systematic["type"] == "weight":
-                        self.process_weight_based_systematic(
-                            systematic,
-                            systematic_yields,
-                            sample_path,
-                            nominal_weight,
-                            adjusted_selection,
-                        )
+        systematic_yields = result.yields
+        nominal_yield = systematic_yields.pop("nominal", 0)
 
         for systematic in flavour_config["systematics"]:
             if systematic["type"] == "sample":
@@ -168,27 +188,36 @@ class SystematicYieldCalc:
 
         return nominal_yield, systematic_yields
 
+    def process_flavour_wrapper(self, args):
+        flavour_name, flavour_config = args
+        logging.info(f"Processing flavour: {flavour_name}")
+        return self.process_flavour(
+            self.config["base_path"],
+            self.config["folders"],
+            self.config["nominal_weight"],
+            flavour_config,
+        )
+
     def run(self):
-        base_path = self.config["base_path"]
-        folders = self.config["folders"]
-        nominal_weight = self.config["nominal_weight"]
         results = {}
-        for flavour_name, flavour_config in self.config["flavours"].items():
-            logger.info(f"Processing flavour: {flavour_name}")
-            nominal_yield, systematic_yields = self.process_flavour(
-                base_path, folders, nominal_weight, flavour_config
+        with multiprocessing.Pool() as pool:
+            flavour_results = pool.map(
+                self.process_flavour_wrapper,
+                self.config["flavours"].items(),
             )
+            for flavour_name, (nominal_yield, systematic_yields) in zip(
+                self.config["flavours"].keys(), flavour_results
+            ):
+                renormalisations = {}
+                for sys_name, sys_yield in systematic_yields.items():
+                    renorm = 1 / (sys_yield / nominal_yield) if nominal_yield else 0
+                    renormalisations[sys_name] = renorm
 
-            renormalisations = {}
-            for sys_name, sys_yield in systematic_yields.items():
-                renorm = 1 / (sys_yield / nominal_yield) if nominal_yield else 0
-                renormalisations[sys_name] = renorm
-
-            results[flavour_name] = {
-                "nominal": nominal_yield,
-                "systematic_yields": systematic_yields,
-                "renormalisations": renormalisations,
-            }
+                results[flavour_name] = {
+                    "nominal": nominal_yield,
+                    "systematic_yields": systematic_yields,
+                    "renormalisations": renormalisations,
+                }
         return results
 
 
@@ -248,10 +277,8 @@ def save_to_csv(results, output_file):
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(
-        description="Calculate systematic renormalisation factors"
-        "for the ttH(bb) Run-2 Legacy analysis."
+        description="Calculate systematic renormalisation factors for the ttH(bb) Run-2 Legacy analysis."
     )
 
     parser.add_argument("config_file", help="Path to the configuration file.")
@@ -259,14 +286,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "-o",
         "--output_file",
-        help="Path to the output csv file, where the"
-        "systematic renormalisation values will be saved.",
+        help="Path to the output csv file, where the systematic renormalisation values will be saved.",
     )
 
     args = parser.parse_args()
 
     config_file = args.config_file
-
     output_csv_file = args.output_file
 
     systematic_yield_calc = SystematicYieldCalc(config_file)
