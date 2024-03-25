@@ -1,17 +1,23 @@
-base_path: "/scratch4/levans/L2_ttHbb_Production_212238_v5/1l/"
+base_path: "/scratch4/levans/L2_ttHbb_Production_212238_v5/"
 nominal_weight: "weight_normalise*weight_mc*weight_pileup*weight_leptonSF*weight_jvt*weight_L2_bTag_DL1r_Continuous*weight_leptonSF_SOFTMU_corr_based*(randomRunNumber<=311481 ? 36646.74 : (randomRunNumber<=340453 ? 44630.6 : 58791.6))"
 
 extra_selections:
   resolved: " && (passedOfflineBoostedSelection == 0)"
 
 folders:
-  - "5j3b_discriminant_ttlight"
-  - "5j3b_discriminant_ttc"
-  - "5j3b_discriminant_ttb"
-  - "5j3b_discriminant_ttbb"
-  - "5j3b_discriminant_ttB"
-  - "5j3b_discriminant_ttH"
-  - "boosted"
+  - "1l/5j3b_discriminant_ttlight"
+  - "1l/5j3b_discriminant_ttc"
+  - "1l/5j3b_discriminant_ttb"
+  - "1l/5j3b_discriminant_ttbb"
+  - "1l/5j3b_discriminant_ttB"
+  - "1l/5j3b_discriminant_ttH"
+  - "1l/boosted"
+  - "2l/3j3b_discriminant_ttlight"
+  - "2l/3j3b_discriminant_ttc"
+  - "2l/3j3b_discriminant_ttb"
+  - "2l/3j3b_discriminant_ttbb"
+  - "2l/3j3b_discriminant_ttB"
+  - "2l/3j3b_discriminant_ttH"
 
 flavours:
   tt_light:
@@ -72,6 +78,7 @@ flavours:
           - "tt_PP8_mc16a_AFII"
           - "tt_PP8_mc16d_AFII"
           - "tt_PP8_mc16e_AFII"
+        up_weight: "weight_ht_reweight_AFII"
 
   tt_1c:
     selection: "(HF_SimpleClassification == -1)"
@@ -131,6 +138,7 @@ flavours:
           - "tt_PP8_mc16a_AFII"
           - "tt_PP8_mc16d_AFII"
           - "tt_PP8_mc16e_AFII"
+          up_weight: "weight_ht_reweight_AFII"
 
   tt_1b:
     selection: "(HF_SimpleClassification == 1 && (HF_Classification >= 1000 && HF_Classification < 1100))"
