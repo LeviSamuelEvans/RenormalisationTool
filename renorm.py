@@ -25,11 +25,9 @@ class GreenFormatter(logging.Formatter):
     RESET = "\033[1;0m"
 
     def format(self, record):
-        if (
-            # log flavour processing in green
-            record.levelno == logging.INFO
-            and record.msg.startswith("Processing flavour:")
-            and record.funcName == "process_flavour_wrapper"
+        # log flavour processing in green
+        if record.levelno == logging.INFO and record.msg.startswith(
+            "Processing flavour:"
         ):
             record.msg = f"{self.GREEN}{record.msg}{self.RESET}"
         return super().format(record)
@@ -51,6 +49,7 @@ class YieldResult:
     def merge(self, other):
         for sys_name, yield_value in other.yields.items():
             self.yields[sys_name] = self.yields.get(sys_name, 0) + yield_value
+
 
 class SystematicYieldCalc:
     def __init__(self, config_file):
@@ -85,7 +84,11 @@ class SystematicYieldCalc:
 
     def calculate_yields(self, df, weight_expressions, selection):
         def fill_result(result, weight_name, weight_expr):
-            result.yields[weight_name] = df.Define(f"weight_{weight_name}", weight_expr).Sum(f"weight_{weight_name}").GetValue()
+            result.yields[weight_name] = (
+                df.Define(f"weight_{weight_name}", weight_expr)
+                .Sum(f"weight_{weight_name}")
+                .GetValue()
+            )
 
         result = YieldResult()
         df = df.Filter(selection)
@@ -190,7 +193,7 @@ class SystematicYieldCalc:
 
     def process_flavour_wrapper(self, args):
         flavour_name, flavour_config = args
-        logging.info(f"Processing flavour: {flavour_name}")
+        logger.info(f"Processing flavour: {flavour_name}")
         return self.process_flavour(
             self.config["base_path"],
             self.config["folders"],
@@ -198,16 +201,36 @@ class SystematicYieldCalc:
             flavour_config,
         )
 
-    def run(self):
+    def run(self, use_multiprocessing=False):
         results = {}
-        with multiprocessing.Pool() as pool:
-            flavour_results = pool.map(
-                self.process_flavour_wrapper,
-                self.config["flavours"].items(),
-            )
-            for flavour_name, (nominal_yield, systematic_yields) in zip(
-                self.config["flavours"].keys(), flavour_results
-            ):
+        if use_multiprocessing is True:
+            with multiprocessing.Pool() as pool:
+                flavour_results = pool.map(
+                    self.process_flavour_wrapper,
+                    self.config["flavours"].items(),
+                )
+                for flavour_name, (nominal_yield, systematic_yields) in zip(
+                    self.config["flavours"].keys(), flavour_results
+                ):
+                    renormalisations = {}
+                    for sys_name, sys_yield in systematic_yields.items():
+                        renorm = 1 / (sys_yield / nominal_yield) if nominal_yield else 0
+                        renormalisations[sys_name] = renorm
+
+                    results[flavour_name] = {
+                        "nominal": nominal_yield,
+                        "systematic_yields": systematic_yields,
+                        "renormalisations": renormalisations,
+                    }
+        else:
+            for flavour_name, flavour_config in self.config["flavours"].items():
+                logger.info(f"Processing flavour: {flavour_name}")
+                nominal_yield, systematic_yields = self.process_flavour(
+                    self.config["base_path"],
+                    self.config["folders"],
+                    self.config["nominal_weight"],
+                    flavour_config,
+                )
                 renormalisations = {}
                 for sys_name, sys_yield in systematic_yields.items():
                     renorm = 1 / (sys_yield / nominal_yield) if nominal_yield else 0
@@ -289,13 +312,77 @@ if __name__ == "__main__":
         help="Path to the output csv file, where the systematic renormalisation values will be saved.",
     )
 
+    parser.add_argument(
+        "--systematics",
+        nargs="+",
+        default=None,
+        help="List of systematics to run over (default: all systematics)"
+        "where name of systematic is the same as in the config file",
+    )
+
+    parser.add_argument(
+        "--flavours",
+        nargs="+",
+        default=None,
+        help="List of flavours to run over (default: all flavours)"
+        "where name of flavour is the same as in the config file",
+    )
+
+    parser.add_argument(
+        "--multiprocessing",
+        action="store_true",
+        help="Use multi-processing to calculate yields (default: False)"
+        "This will run all flavours in parallel and speeds up the"
+        "calculation, but beward the use of your computational resources"
+        "as it will use all available cores.",
+    )
+
     args = parser.parse_args()
 
     config_file = args.config_file
     output_csv_file = args.output_file
+    systematics_to_run = args.systematics
+    flavours_to_run = args.flavours
+    use_multiprocessing = args.multiprocessing
 
     systematic_yield_calc = SystematicYieldCalc(config_file)
+
+    # filter systematics
+    if systematics_to_run is not None:
+        for flavour_config in systematic_yield_calc.config["flavours"].values():
+            flavour_config["systematics"] = [
+                systematic
+                for systematic in flavour_config["systematics"]
+                if systematic["name"] in systematics_to_run
+            ]
+    # filter flavours
+    if flavours_to_run is not None:
+        systematic_yield_calc.config["flavours"] = {
+            flavour: config
+            for flavour, config in systematic_yield_calc.config["flavours"].items()
+            if flavour in flavours_to_run
+        }
+
+    if use_multiprocessing is True:
+        logger.info("Using multi-processing to calculate yields.")
+
+    logging.info("Running over the following flavours:")
+    for flavour in systematic_yield_calc.config["flavours"]:
+        logging.info(f"- {flavour}")
+
+    logging.info("\nRunning over the following systematics:")
+    all_systematics = set()
+    for flavour_config in systematic_yield_calc.config["flavours"].values():
+        all_systematics.update(
+            systematic["name"] for systematic in flavour_config["systematics"]
+        )
+    for systematic in all_systematics:
+        logging.info(f"- {systematic}")
+
+    print("\nStarting renormalisation calculation...")
+
     results = systematic_yield_calc.run()
+
     for flavour, result in results.items():
         print(f"Flavour: {flavour}")
         for key, value in result.items():
