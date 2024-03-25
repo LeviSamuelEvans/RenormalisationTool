@@ -14,18 +14,26 @@ ROOT.EnableImplicitMT()
 
 
 def ensure_root_extension(file_name):
+    """Helper function to add .root extension if missing"""
     if not file_name.endswith(".root"):
         return file_name + ".root"
     return file_name
+
 
 class GreenFormatter(logging.Formatter):
     GREEN = "\033[1;32m"
     RESET = "\033[1;0m"
 
     def format(self, record):
-        if record.levelno == logging.INFO and record.msg.startswith("Processing flavour:") and record.funcName == "process_flavour_wrapper":
+        if (
+            # log flavour processing in green
+            record.levelno == logging.INFO
+            and record.msg.startswith("Processing flavour:")
+            and record.funcName == "process_flavour_wrapper"
+        ):
             record.msg = f"{self.GREEN}{record.msg}{self.RESET}"
         return super().format(record)
+
 
 # logging configuration
 handler = logging.StreamHandler()
@@ -34,6 +42,15 @@ handler.setFormatter(GreenFormatter("{levelname:<8s} {message}", style="{"))
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logger.addHandler(handler)
+
+
+class YieldResult:
+    def __init__(self):
+        self.yields = {}
+
+    def merge(self, other):
+        for sys_name, yield_value in other.yields.items():
+            self.yields[sys_name] = self.yields.get(sys_name, 0) + yield_value
 
 class SystematicYieldCalc:
     def __init__(self, config_file):
@@ -67,12 +84,14 @@ class SystematicYieldCalc:
             return None
 
     def calculate_yields(self, df, weight_expressions, selection):
+        def fill_result(result, weight_name, weight_expr):
+            result.yields[weight_name] = df.Define(f"weight_{weight_name}", weight_expr).Sum(f"weight_{weight_name}").GetValue()
+
+        result = YieldResult()
         df = df.Filter(selection)
-        yields = {}
         for name, weight_expr in weight_expressions.items():
-            df_yield = df.Define(f"weight_{name}", weight_expr)
-            yields[name] = df_yield.Sum(f"weight_{name}").GetValue()
-        return yields
+            fill_result(result, name, weight_expr)
+        return result
 
     def process_weight_based_systematic(self, systematic, weight_expressions):
         sys_name = systematic["name"]
@@ -117,10 +136,10 @@ class SystematicYieldCalc:
                             f"Processing {variation_type} variation for {systematic['name']}: {sample_path}"
                         )
                         df = ROOT.RDataFrame("nominal_Loose", sample_path)
-                        sys_yield += self.calculate_yields(
+                        result = self.calculate_yields(
                             df, {"nominal": combined_weight}, adjusted_selection
-                        )["nominal"]
-
+                        )
+                        sys_yield += result.yields["nominal"]
                 systematic_yields[f"{systematic['name']}_{variation_type}"] = sys_yield
             else:
                 logger.info(
@@ -129,14 +148,12 @@ class SystematicYieldCalc:
 
     def process_flavour(self, base_path, folders, nominal_weight, flavour_config):
         selection = flavour_config["selection"]
-        nominal_yield = 0
-        systematic_yields = {}
-
         weight_expressions = {"nominal": nominal_weight}
         for systematic in flavour_config["systematics"]:
             if systematic["type"] == "weight":
                 self.process_weight_based_systematic(systematic, weight_expressions)
 
+        result = YieldResult()
         for folder in folders:
             adjusted_selection = selection
             if "boosted" not in folder and "2l_" not in folder:
@@ -150,16 +167,12 @@ class SystematicYieldCalc:
                     f"Processing nominal and weight-based systematics: {sample_path}"
                 )
                 df = ROOT.RDataFrame("nominal_Loose", sample_path)
-                yields = self.calculate_yields(
-                    df, weight_expressions, adjusted_selection
+                result.merge(
+                    self.calculate_yields(df, weight_expressions, adjusted_selection)
                 )
 
-                nominal_yield += yields["nominal"]
-                for sys_name, sys_yield in yields.items():
-                    if sys_name != "nominal":
-                        systematic_yields[sys_name] = (
-                            systematic_yields.get(sys_name, 0) + sys_yield
-                        )
+        systematic_yields = result.yields
+        nominal_yield = systematic_yields.pop("nominal", 0)
 
         for systematic in flavour_config["systematics"]:
             if systematic["type"] == "sample":
