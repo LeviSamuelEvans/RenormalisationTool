@@ -1,0 +1,1 @@
+A small utility to facilitate the calculation of the fidicual cross-section renormalisation values for systematic samples in the ttH(bb) Full run 2 legacy analysis. WIP
