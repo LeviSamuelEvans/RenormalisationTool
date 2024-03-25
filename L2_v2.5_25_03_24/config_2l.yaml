@@ -1,0 +1,71 @@
+base_path: "/scratch4/levans/L2_ttHbb_Production_212238_v5/2l/"
+nominal_weight: "weight_normalise*weight_mc*weight_pileup*weight_leptonSF*weight_jvt*weight_L2_bTag_DL1r_Continuous*weight_leptonSF_SOFTMU_corr_based*(randomRunNumber<=311481 ? 36646.74 : (randomRunNumber<=340453 ? 44630.6 : 58791.6))"
+
+folders:
+  - "3j3b_discriminant_ttlight"
+  - "3j3b_discriminant_ttc"
+  - "3j3b_discriminant_ttb"
+  - "3j3b_discriminant_ttbb"
+  - "3j3b_discriminant_ttB"
+  - "3j3b_discriminant_ttH"
+
+flavours:
+  tt_light:
+    selection: "(HF_SimpleClassification == 0)"
+    files:
+      - "tt_PP8_mc16a.root"
+      #- "tt_PP8_mc16d.root"
+      #- "tt_PP8_mc16e.root"
+    systematics:
+      - name: "muR"
+        type: "weight"
+        up_weight: "( 1/(weight_mc*weight_normalise) * (weight_muR20_muF10*weight_normalise_muR20_muF10) ) * weight_ht_reweight_muR_up"
+        down_weight: "( 1/(weight_mc*weight_normalise) * (weight_muR05_muF10*weight_normalise_muR05_muF10) ) * weight_ht_reweight_muR_down"
+
+  tt_1c:
+    selection: "(HF_SimpleClassification == -1)"
+    files:
+      - "tt_PP8_mc16a.root"
+      #- "tt_PP8_mc16d.root"
+      #- "tt_PP8_mc16e.root"
+    systematics:
+      - name: "muR"
+        type: "weight"
+        up_weight: "( 1/(weight_mc*weight_normalise) * (weight_muR20_muF10*weight_normalise_muR20_muF10) ) * weight_ht_reweight_muR_up"
+        down_weight: "( 1/(weight_mc*weight_normalise) * (weight_muR05_muF10*weight_normalise_muR05_muF10) ) * weight_ht_reweight_muR_down"
+
+  tt_1b:
+    selection: "(HF_SimpleClassification == 1 && (HF_Classification >= 1000 && HF_Classification < 1100))"
+    files:
+      - "ttbb_PP8_mc16a.root"
+      #- "ttbb_PP8_mc16d.root"
+      #- "ttbb_PP8_mc16e.root"
+    systematics:
+      - name: "muR"
+        type: "weight"
+        up_weight: "1/(weight_mc*weight_normalise) * (weight_ttb_pp8_4FS_muR20_muF10*weight_normalise_ttb_pp8_4FS_muR20_muF10)"
+        down_weight: "1/(weight_mc*weight_normalise) * (weight_ttb_pp8_4FS_muR05_muF10*weight_normalise_ttb_pp8_4FS_muR05_muF10)"
+
+  tt_2b:
+    selection: "(HF_SimpleClassification == 1 && ((HF_Classification >= 200 && HF_Classification < 1000) || HF_Classification >= 1100))"
+    files:
+      - "ttbb_PP8_mc16a.root"
+      #- "ttbb_PP8_mc16d.root"
+      #- "ttbb_PP8_mc16e.root"
+    systematics:
+      - name: "muR"
+        type: "weight"
+        up_weight: "1/(weight_mc*weight_normalise) * (weight_ttb_pp8_4FS_muR20_muF10*weight_normalise_ttb_pp8_4FS_muR20_muF10)"
+        down_weight: "1/(weight_mc*weight_normalise) * (weight_ttb_pp8_4FS_muR05_muF10*weight_normalise_ttb_pp8_4FS_muR05_muF10)"
+
+  tt_1B:
+    selection: "(HF_SimpleClassification == 1 && (HF_Classification >= 100 && HF_Classification < 200))"
+    files:
+      - "ttbb_PP8_mc16a.root"
+      #- "ttbb_PP8_mc16d.root"
+      #- "ttbb_PP8_mc16e.root"
+    systematics:
+      - name: "muR"
+        type: "weight"
+        up_weight: "1/(weight_mc*weight_normalise) * (weight_ttb_pp8_4FS_muR20_muF10*weight_normalise_ttb_pp8_4FS_muR20_muF10)"
+        down_weight: "1/(weight_mc*weight_normalise) * (weight_ttb_pp8_4FS_muR05_muF10*weight_normalise_ttb_pp8_4FS_muR05_muF10)"
