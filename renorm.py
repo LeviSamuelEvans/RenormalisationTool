@@ -126,7 +126,7 @@ class SystematicYieldCalc:
 
         for folder in folders:
             adjusted_selection = selection
-            if "boosted" not in folder:
+            if "boosted" not in folder and "2l_" not in folder:
                 adjusted_selection += self.config["extra_selections"]["resolved"]
 
             for file_rel_path in flavour_config["files"]:
