@@ -138,7 +138,7 @@ flavours:
           - "tt_PP8_mc16a_AFII"
           - "tt_PP8_mc16d_AFII"
           - "tt_PP8_mc16e_AFII"
-          up_weight: "weight_ht_reweight_AFII"
+        up_weight: "weight_ht_reweight_AFII"
 
   tt_1b:
     selection: "(HF_SimpleClassification == 1 && (HF_Classification >= 1000 && HF_Classification < 1100))"
