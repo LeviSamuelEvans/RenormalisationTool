@@ -44,12 +44,12 @@ For a simple run, simply do:
 
 The script comes configured with multiple running options, these being:
 
-| Option            | Description                                                                                                                       |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| -o, --ouput_file  | The path to a .csv file in which to save the nominal and systematic yields alongside the renormalisation values.                  |
-| --systematics     | A space-separated list of systematics to run over (default: all flavours) where name of flavour is the same as in the config file |
-| --flavours        | A space-separated list of flavours to run over (default: all flavours) where name of flavour is the same as in the config file    |
-| --multiprocessing | Run over flavours supplied simulatenously for somewhat quicker processing                                                         |
+| Option            | Description                                                                                                                             |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| -o, --ouput_file  | The path to a .csv file in which to save the nominal and systematic yields alongside the renormalisation values.                        |
+| --systematics     | A space-separated list of systematics to run over (default: all systematics) where name of systematic is the same as in the config file |
+| --flavours        | A space-separated list of flavours to run over (default: all flavours) where name of flavour is the same as in the config file          |
+| --multiprocessing | Run over flavours supplied simulatenously for somewhat quicker processing                                                               |
 
 In additon to the output .csv file, the yields and renormalisation values will also be printed to the terminal. Inside the csv file you will find:
 
