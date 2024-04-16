@@ -128,9 +128,9 @@ class SystematicYieldCalc:
                     for folder in folders:
                         adjusted_selection = selection
                         if "boosted" not in folder:
-                            adjusted_selection += self.config["extra_selections"][
-                                "resolved"
-                            ]
+                            # check if we have an extra selection for resolved
+                            resolved_selection = self.config.get("extra_selections", {}).get("resolved", "")
+                            adjusted_selection += resolved_selection
 
                         sample_path = os.path.join(
                             base_path, folder, file_rel_path_with_ext
@@ -160,7 +160,9 @@ class SystematicYieldCalc:
         for folder in folders:
             adjusted_selection = selection
             if "boosted" not in folder and "2l_" not in folder:
-                adjusted_selection += self.config["extra_selections"]["resolved"]
+                # check if we have an extra selection for resolved
+                resolved_selection = self.config.get("extra_selections", {}).get("resolved", "")
+                adjusted_selection += resolved_selection
 
             for file_rel_path in flavour_config["files"]:
                 file_rel_path_with_ext = ensure_root_extension(file_rel_path)
